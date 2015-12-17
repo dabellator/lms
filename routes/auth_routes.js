@@ -1,6 +1,7 @@
 var express = require('express');
 var request = require('superagent');
 var handleErr = require(__dirname + '/../lib/handle_error');
+var User = require(__dirname + '/../models/user');
 
 var clientId = process.env.CLIENT_ID;
 var clientSecret = process.env.CLIENT_SECRET;
@@ -19,8 +20,29 @@ authRouter.get('/token', function(req, res) {
     .query({code: req.query.code})
     .end(function(err, data) {
       if (err) return handleErr(err, res);
-      // Need to build user DB to save token encrypt and save token
-      res.json({token: data.body.access_token});
+
+      var token = data.body.access_token;
+
+      request
+        .get('https://api.github.com/user')
+        .query({access_token: token})
+        .end(function(err, data) {
+          if (err) return handleErr(err, res);
+
+          var user = new User();
+          user.username = data.body.login;
+          user.token = token;
+
+          user.save(function(err, info) {
+            if (err) return handleErr(err, res);
+
+            user.generateToken(function(err, token) {
+              if (err) return handleErr(err, res);
+
+              res.json({token: token});
+            });
+          });
+        });
     });
 });
 
